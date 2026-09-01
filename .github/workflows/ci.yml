@@ -33,4 +33,4 @@ jobs:
               run: pytest --cov=. --cov-report=term-missing
 
             - name: Build Docker image
-              run: docker build -t ci-cd-learning:latest:${{ github.sha }} .
+              run: docker build -t ci-cd-learning:${{ github.sha }} .
