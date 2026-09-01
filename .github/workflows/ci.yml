@@ -12,7 +12,11 @@ jobs:
 
         strategy:
             matrix:
-                python-version: ["3.10", "3.11", "3.12"]
+                python-version: ["3.12"]
+
+        permissions: 
+            contents: read
+            packages: write
 
         steps:
             - name: Checkout code
@@ -33,4 +37,17 @@ jobs:
               run: pytest --cov=. --cov-report=term-missing
 
             - name: Build Docker image
-              run: docker build -t ci-cd-learning:${{ github.sha }} .
+              if: matrix.python-version == '3.12' && github.event_name == 'push'
+              run: docker build -t ghcr.io/${{ github.repository }}:${{ github.sha }} .
+
+            - name: Login to ghcr
+              if: matrix.python-version == '3.12' && github.event_name == 'push'
+              uses: docker/login-action@v3
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Push Docker image 
+              if: matrix.python-version == '3.12' && github.event_name == 'push'
+              run: docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
