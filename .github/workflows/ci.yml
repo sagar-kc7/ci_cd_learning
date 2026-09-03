@@ -291,20 +291,20 @@ jobs:
     
         steps:
             - name: Get OIDC token
-            id: oidc
-            uses: actions/github-script@v7
-            with:
-                script: |
-                  const core = require('@actions/core');
-      
-                  const token = await core.getIDToken('sts.amazonaws.com');
-      
-                  const payload = JSON.parse(
-                    Buffer.from(token.split('.')[1], 'base64url').toString()
-                  );
-      
-                  core.info(`sub: ${payload.sub}`);
-                  core.info(`aud: ${payload.aud}`);
-                  core.info(`repository: ${payload.repository}`);
-                  core.info(`ref: ${payload.ref}`);
-                  core.info(`repository_owner: ${payload.repository_owner}`);
+              id: oidc
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                    const core = require('@actions/core');
+        
+                    const token = await core.getIDToken('sts.amazonaws.com');
+        
+                    const payload = JSON.parse(
+                      Buffer.from(token.split('.')[1], 'base64url').toString()
+                    );
+        
+                    core.info(`sub: ${payload.sub}`);
+                    core.info(`aud: ${payload.aud}`);
+                    core.info(`repository: ${payload.repository}`);
+                    core.info(`ref: ${payload.ref}`);
+                    core.info(`repository_owner: ${payload.repository_owner}`);
