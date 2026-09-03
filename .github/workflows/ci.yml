@@ -282,6 +282,10 @@ jobs:
             - name: Test AWS identity
               run: aws sts get-caller-identity
 
+            - name: List EC2 instances
+              run: aws ec2 describe-instances \
+                --query 'Reservations[].Instances[*].InstanceId' \
+                --output table
     # oidc-debug:
     #     runs-on: ubuntu-latest
     
