@@ -273,15 +273,11 @@ jobs:
           contents: read
     
         steps:
-            - name: Debug OIDC
-              uses: github/actions-oidc-debugger@main
+            - name: Configure AWS credentials
+              uses: aws-actions/configure-aws-credentials@v5
               with:
-                audience: sts.amazonaws.com
-            # - name: Configure AWS credentials
-            #   uses: aws-actions/configure-aws-credentials@v5
-            #   with:
-            #     role-to-assume: arn:aws:iam::027758599866:role/GitHubActionsCICDRole
-            #     aws-region: us-east-1
+                role-to-assume: arn:aws:iam::027758599866:role/GitHubActionsCICDRole
+                aws-region: us-east-1
       
-            # - name: Test AWS identity
-            #   run: aws sts get-caller-identity
+            - name: Test AWS identity
+              run: aws sts get-caller-identity
