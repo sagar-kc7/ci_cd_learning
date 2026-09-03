@@ -282,27 +282,27 @@ jobs:
             - name: Test AWS identity
               run: aws sts get-caller-identity
 
-    oidc-debug:
-        runs-on: ubuntu-latest
+    # oidc-debug:
+    #     runs-on: ubuntu-latest
     
-        permissions:
-          id-token: write
-          contents: read
+    #     permissions:
+    #       id-token: write
+    #       contents: read
     
-        steps:
-            - name: Get OIDC token claims
-              id: oidc
-              uses: actions/github-script@v7
-              with:
-                  script: |
-                    const token = await core.getIDToken('sts.amazonaws.com');
+    #     steps:
+    #         - name: Get OIDC token claims
+    #           id: oidc
+    #           uses: actions/github-script@v7
+    #           with:
+    #               script: |
+    #                 const token = await core.getIDToken('sts.amazonaws.com');
 
-                    const payload = JSON.parse(
-                      Buffer.from(token.split('.')[1], 'base64url').toString()
-                    );
+    #                 const payload = JSON.parse(
+    #                   Buffer.from(token.split('.')[1], 'base64url').toString()
+    #                 );
         
-                    core.info(`sub: ${payload.sub}`);
-                    core.info(`aud: ${payload.aud}`);
-                    core.info(`repository: ${payload.repository}`);
-                    core.info(`ref: ${payload.ref}`);
-                    core.info(`repository_owner: ${payload.repository_owner}`);
+    #                 core.info(`sub: ${payload.sub}`);
+    #                 core.info(`aud: ${payload.aud}`);
+    #                 core.info(`repository: ${payload.repository}`);
+    #                 core.info(`ref: ${payload.ref}`);
+    #                 core.info(`repository_owner: ${payload.repository_owner}`);
