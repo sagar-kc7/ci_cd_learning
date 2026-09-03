@@ -65,7 +65,7 @@ jobs:
                   username: ${{ secrets.EC2_USERNAME }}
                   key: ${{ secrets.EC2_SSH_KEY }}
                   script: |
-                      IMAGE=ghcr.io/${{ github.repository }}:${{ github.sha }}
+                      NEW_IMAGE=ghcr.io/${{ github.repository }}:${{ github.sha }}
                       STATE_FILE=/opt/ci-cd-learning/current_image
 
                       echo "New_image: $NEW_IMAGE"
@@ -77,7 +77,7 @@ jobs:
                           OLD_IMAGE=""
                       fi
 
-                      docker pull $IMAGE
+                      docker pull $NEW_IMAGE
                       docker stop ci-cd-app || true
                       docker rm ci-cd-app || true
                       docker run -d \
@@ -91,7 +91,7 @@ jobs:
                       HEALTHY=false
                       
                       for i in {1..10}; do
-                          if curl -s http://localhost:8000/health; then
+                          if curl -fs http://localhost:8000/health; then
                               echo "Application is healthy"
                               HEALTHY=true
                               break
@@ -124,7 +124,7 @@ jobs:
                           echo "Waiting for application to become healthy after rollback..."
 
                           for i in {1..10}; do
-                              if curl -s http://localhost:8000/health; then
+                              if curl -fs http://localhost:8000/health; then
                                   echo "Rollback successful"
                                   exit 1
                               fi
