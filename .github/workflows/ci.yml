@@ -290,15 +290,13 @@ jobs:
           contents: read
     
         steps:
-            - name: Get OIDC token
+            - name: Get OIDC token claims
               id: oidc
               uses: actions/github-script@v7
               with:
                   script: |
-                    const core = require('@actions/core');
-        
                     const token = await core.getIDToken('sts.amazonaws.com');
-        
+
                     const payload = JSON.parse(
                       Buffer.from(token.split('.')[1], 'base64url').toString()
                     );
