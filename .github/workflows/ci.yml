@@ -85,4 +85,5 @@ jobs:
                       done
 
                       echo "Application failed health check"
+                      docker logs ci-cd-app
                       exit 1
