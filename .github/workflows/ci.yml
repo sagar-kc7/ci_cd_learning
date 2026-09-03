@@ -66,6 +66,17 @@ jobs:
                   key: ${{ secrets.EC2_SSH_KEY }}
                   script: |
                       IMAGE=ghcr.io/${{ github.repository }}:${{ github.sha }}
+                      STATE_FILE=/opt/ci-cd-learning/current_image
+
+                      echo "New_image: $NEW_IMAGE"
+                      if [ -f "$STATE_FILE" ]; then
+                          OLD_IMAGE=$(cat $STATE_FILE)
+                          echo "Previous_image: $OLD_IMAGE"
+                      else
+                          echo "No Previous_image found. This is the first deployment."
+                          OLD_IMAGE=""
+                      fi
+
                       docker pull $IMAGE
                       docker stop ci-cd-app || true
                       docker rm ci-cd-app || true
@@ -74,16 +85,57 @@ jobs:
                         --restart unless-stopped \
                         -p 8000:8000 \
                         $IMAGE
+
+                      echo "Waiting for application to become healthy..."
+
+                      HEALTHY=false
                       
                       for i in {1..10}; do
                           if curl -s http://localhost:8000/health; then
                               echo "Application is healthy"
-                              exit 0
+                              HEALTHY=true
+                              break
                           fi
-                              echo "Waiting for application...."
+
+                          echo "Health check failed. Retrying in 2 seconds..."
                               sleep 2
                       done
 
+                      if [ "$HEALTHY" = true ]; then
+                          echo "Application is healthy"
+                          echo "$NEW_IMAGE" > "$STATE_FILE"
+                          exit 0
+                      fi
+
                       echo "Application failed health check"
                       docker logs ci-cd-app
+
+                      # ROLLBACK
+                      if [ -n "$OLD_IMAGE" ]; then
+                          echo "Rolling back to previous image: $OLD_IMAGE"
+                          docker stop ci-cd-app || true
+                          docker rm ci-cd-app || true
+                          docker run -d \
+                            --name ci-cd-app \
+                            --restart unless-stopped \
+                            -p 8000:8000 \
+                            "$OLD_IMAGE"
+
+                          echo "Waiting for application to become healthy after rollback..."
+
+                          for i in {1..10}; do
+                              if curl -s http://localhost:8000/health; then
+                                  echo "Rollback successful"
+                                  exit 1
+                              fi
+                              
+                              sleep 2
+                          done
+
+                          echo "Rollback failed."
+                          docker logs ci-cd-app ||
+                          exit 1
+                        fi
+
+                        echo "No previous image to rollback to. Deployment failed."
                       exit 1
