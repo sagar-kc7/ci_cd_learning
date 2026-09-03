@@ -1,11 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 app = FastAPI()
 
 @app.get("/")
 def home():
-    return {"message": "Healthy deployment"}
+    return {"message": "Testing safe deployment"}
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    raise HTTPException(status_code=500, detail="Intentional failure")

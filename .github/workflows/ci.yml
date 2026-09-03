@@ -66,33 +66,25 @@ jobs:
                   key: ${{ secrets.EC2_SSH_KEY }}
                   script: |
                       NEW_IMAGE=ghcr.io/${{ github.repository }}:${{ github.sha }}
-                      STATE_FILE=/opt/ci-cd-learning/current_image
 
                       echo "New_image: $NEW_IMAGE"
-                      if [ -f "$STATE_FILE" ]; then
-                          OLD_IMAGE=$(cat $STATE_FILE)
-                          echo "Previous_image: $OLD_IMAGE"
-                      else
-                          echo "No Previous_image found. This is the first deployment."
-                          OLD_IMAGE=""
-                      fi
+                      echo "Pulling new image: $NEW_IMAGE"
 
                       docker pull $NEW_IMAGE
-                      docker stop ci-cd-app || true
-                      docker rm ci-cd-app || true
+                      docker stop ci-cd-app-new || true
+                      docker rm ci-cd-app-new || true
                       docker run -d \
-                        --name ci-cd-app \
+                        --name ci-cd-app-new \
                         --restart unless-stopped \
-                        -p 8000:8000 \
-                        $IMAGE
+                        -p 8001:8000 \
+                        $NEW_IMAGE
 
                       echo "Waiting for application to become healthy..."
 
                       HEALTHY=false
                       
                       for i in {1..10}; do
-                          if curl -fs http://localhost:8000/health; then
-                              echo "Application is healthy"
+                          if curl --fail http://localhost:8001/health; then
                               HEALTHY=true
                               break
                           fi
@@ -101,41 +93,44 @@ jobs:
                               sleep 2
                       done
 
-                      if [ "$HEALTHY" = true ]; then
-                          echo "Application is healthy"
-                          echo "$NEW_IMAGE" > "$STATE_FILE"
-                          exit 0
+                      if [ "$HEALTHY" != true ]; then
+                          echo "Application failed health check"
+                          echo "Candidate container logs:"
+                          docker logs ci-cd-app-new || true
+
+                          docker stop ci-cd-app-new || true
+                          docker rm ci-cd-app-new || true
+                          exit 1
                       fi
 
-                      echo "Application failed health check"
-                      docker logs ci-cd-app
+                      echo "New version is healthy. Proceeding with deployment."
 
-                      # ROLLBACK
-                      if [ -n "$OLD_IMAGE" ]; then
-                          echo "Rolling back to previous image: $OLD_IMAGE"
-                          docker stop ci-cd-app || true
-                          docker rm ci-cd-app || true
-                          docker run -d \
-                            --name ci-cd-app \
-                            --restart unless-stopped \
-                            -p 8000:8000 \
-                            "$OLD_IMAGE"
+                      docker stop ci-cd-app || true
+                      docker rm ci-cd-app || true
 
-                          echo "Waiting for application to become healthy after rollback..."
+                      echo "Starting new version of the application..."
+                      docker run -d \
+                        --name ci-cd-app \
+                        --restart unless-stopped \
+                        -p 8000:8000 \
+                        $NEW_IMAGE
 
-                          for i in {1..10}; do
-                              if curl -fs http://localhost:8000/health; then
-                                  echo "Rollback successful"
-                                  exit 1
-                              fi
-                              
-                              sleep 2
-                          done
+                      Healthy=false
+                      for i in {1..10}; do
+                          if curl --fail http://localhost:8000/health; then
+                              Healthy=true
+                              break
+                          fi
+                          echo "Health check failed. Retrying in 2 seconds..."
+                          sleep 2
+                      done
 
-                          echo "Rollback failed."
-                          docker logs ci-cd-app ||
+                      if [ "$HEALTHY" != true ]; then
+                          echo "Application failed health check"
+                          docker logs ci-cd-app || true
                           exit 1
-                        fi
+                      fi
 
-                        echo "No previous image to rollback to. Deployment failed."
-                      exit 1
+                      echo "Deployment successful. Cleaning up old containers..."
+                          docker stop ci-cd-app-new || true
+                          docker rm ci-cd-app-new || true
