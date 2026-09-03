@@ -51,86 +51,212 @@ jobs:
             - name: Push Docker image 
               if: matrix.python-version == '3.12' && github.event_name == 'push'
               run: docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
-      
-    deploy:
+
+    deploy-staging:
         needs: test
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         runs-on: ubuntu-latest
-
+        environment: staging
+                        
         steps:
-            - name: Deploy to EC2
+            - name: Deploy to staging
               uses: appleboy/ssh-action@v1.2.5
               with:
                   host: ${{ secrets.EC2_HOST }}
                   username: ${{ secrets.EC2_USERNAME }}
                   key: ${{ secrets.EC2_SSH_KEY }}
+                        
                   script: |
+                      IMAGE=ghcr.io/${{ github.repository }}:${{ github.sha }}
+
+                      echo "================================="
+                      echo "Deploying to STAGING"
+                      echo "Image: $IMAGE"
+                      echo "================================="
+                      echo "Pulling image..."
+                      docker pull "$IMAGE"
+          
+                      docker stop ci-cd-app-staging || true
+                      docker rm ci-cd-app-staging || true
+          
+                      docker run -d \
+                        --name ci-cd-app-staging \
+                        --restart unless-stopped \
+                        -p 9000:8000 \
+                        "$IMAGE"
+          
+                      echo "Waiting for staging..."
+          
+                      HEALTHY=false
+
+                      for i in {1..10}; do
+                        if curl --fail http://localhost:9000/health; then
+                          HEALTHY=true
+                          break
+                        fi
+
+                        echo "Staging not ready. Retrying in 2 seconds..."
+                        sleep 2
+                      done
+
+                      if [ "$HEALTHY" != true ]; then
+                        echo "Staging deployment failed."
+                        docker logs ci-cd-app-staging || true
+                        exit 1
+                      fi
+
+                      echo "================================="
+                      echo "✅ Staging deployment successful"
+                      echo "================================="
+
+    deploy-production:
+        needs: deploy-staging
+    
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+        runs-on: ubuntu-latest
+    
+        environment: production
+                    
+        steps:
+            - name: Deploy to production
+              uses: appleboy/ssh-action@v1.2.5
+              with:
+                host: ${{ secrets.EC2_HOST }}
+                username: ${{ secrets.EC2_USERNAME }}
+                key: ${{ secrets.EC2_SSH_KEY }}
+      
+                script: |
                       NEW_IMAGE=ghcr.io/${{ github.repository }}:${{ github.sha }}
-
-                      echo "New_image: $NEW_IMAGE"
-                      echo "Pulling new image: $NEW_IMAGE"
-
-                      docker pull $NEW_IMAGE
+          
+                      echo "================================="
+                      echo "Deploying to PRODUCTION"
+                      echo "Image: $NEW_IMAGE"
+                      echo "================================="
+          
+                      echo "Getting currently running production image..."
+          
+                      OLD_IMAGE=$(docker inspect \
+                        --format='{{.Config.Image}}' \
+                        ci-cd-app 2>/dev/null || true)
+          
+                      echo "Current production image: $OLD_IMAGE"
+          
+                      echo "Pulling new image..."
+                      docker pull "$NEW_IMAGE"
+          
+                      echo "Stopping previous candidate if present..."
                       docker stop ci-cd-app-new || true
                       docker rm ci-cd-app-new || true
+          
+                      echo "Starting production candidate on port 8001..."
+          
                       docker run -d \
                         --name ci-cd-app-new \
                         --restart unless-stopped \
                         -p 8001:8000 \
-                        $NEW_IMAGE
-
-                      echo "Waiting for application to become healthy..."
-
+                        "$NEW_IMAGE"
+          
+                      echo "Checking production candidate..."
+          
                       HEALTHY=false
-                      
+          
                       for i in {1..10}; do
-                          if curl --fail http://localhost:8001/health; then
-                              HEALTHY=true
-                              break
-                          fi
-
-                          echo "Health check failed. Retrying in 2 seconds..."
-                              sleep 2
+                        if curl --fail http://localhost:8001/health; then
+                          HEALTHY=true
+                          break
+                        fi
+          
+                        echo "Candidate not ready. Retrying in 2 seconds..."
+                        sleep 2
                       done
-
+          
                       if [ "$HEALTHY" != true ]; then
-                          echo "Application failed health check"
-                          echo "Candidate container logs:"
-                          docker logs ci-cd-app-new || true
-
-                          docker stop ci-cd-app-new || true
-                          docker rm ci-cd-app-new || true
-                          exit 1
+                        echo "================================="
+                        echo "❌ Production candidate failed"
+                        echo "================================="
+          
+                        docker logs ci-cd-app-new || true
+          
+                        docker stop ci-cd-app-new || true
+                        docker rm ci-cd-app-new || true
+          
+                        echo "Existing production container remains untouched."
+                        exit 1
                       fi
-
-                      echo "New version is healthy. Proceeding with deployment."
-
+          
+                      echo "Production candidate is healthy."
+          
+                      echo "Stopping old production container..."
+          
                       docker stop ci-cd-app || true
                       docker rm ci-cd-app || true
-
-                      echo "Starting new version of the application..."
+          
+                      echo "Starting new production container on port 8000..."
+          
                       docker run -d \
                         --name ci-cd-app \
                         --restart unless-stopped \
                         -p 8000:8000 \
-                        $NEW_IMAGE
-
-                      Healthy=false
+                        "$NEW_IMAGE"
+          
+                      echo "Checking production application..."
+          
+                      HEALTHY=false
+          
                       for i in {1..10}; do
-                          if curl --fail http://localhost:8000/health; then
-                              Healthy=true
-                              break
-                          fi
-                          echo "Health check failed. Retrying in 2 seconds..."
-                          sleep 2
+                        if curl --fail http://localhost:8000/health; then
+                          HEALTHY=true
+                          break
+                        fi
+          
+                        echo "Production not ready. Retrying in 2 seconds..."
+                        sleep 2
                       done
-
+          
                       if [ "$HEALTHY" != true ]; then
-                          echo "Application failed health check"
-                          docker logs ci-cd-app || true
-                          exit 1
+                        echo "================================="
+                        echo "❌ Production startup failed"
+                        echo "================================="
+          
+                        docker logs ci-cd-app || true
+          
+                        echo "Attempting rollback..."
+          
+                        docker stop ci-cd-app || true
+                        docker rm ci-cd-app || true
+          
+                        if [ -n "$OLD_IMAGE" ]; then
+          
+                          echo "Starting previous image: $OLD_IMAGE"
+          
+                          docker run -d \
+                            --name ci-cd-app \
+                            --restart unless-stopped \
+                            -p 8000:8000 \
+                            "$OLD_IMAGE"
+          
+                          echo "Checking rollback..."
+          
+                          for i in {1..10}; do
+                            if curl --fail http://localhost:8000/health; then
+                              echo "Rollback successful."
+                              exit 1
+                            fi
+          
+                            sleep 2
+                          done
+                        fi
+          
+                        echo "Rollback failed."
+                        exit 1
                       fi
-
-                      echo "Deployment successful. Cleaning up old containers..."
-                          docker stop ci-cd-app-new || true
-                          docker rm ci-cd-app-new || true
+          
+                      echo "Cleaning up candidate container..."
+          
+                      docker stop ci-cd-app-new || true
+                      docker rm ci-cd-app-new || true
+          
+                      echo "================================="
+                      echo "✅ Production deployment successful"
+                      echo "================================="
