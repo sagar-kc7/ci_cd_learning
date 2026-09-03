@@ -74,3 +74,15 @@ jobs:
                         --restart unless-stopped \
                         -p 8000:8000 \
                         $IMAGE
+                      
+                      for i in {1..10}; do
+                          if curl -s http://localhost:8000/health; then
+                              echo "Application is healthy"
+                              exit 0
+                          fi
+                              echo "Waiting for application...."
+                              sleep 2
+                      done
+
+                      echo "Application failed health check"
+                      exit 1

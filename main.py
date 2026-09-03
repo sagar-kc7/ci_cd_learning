@@ -4,7 +4,7 @@ app = FastAPI()
 
 @app.get("/")
 def home():
-    return {"message": "Version 2 deployed successfully!"}
+    return {"message": "Version 3 deployed successfully!"}
 
 @app.get("/health")
 def health():
