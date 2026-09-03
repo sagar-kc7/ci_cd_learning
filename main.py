@@ -4,7 +4,7 @@ app = FastAPI()
 
 @app.get("/")
 def home():
-    return {"message": "Concurrency test B"}
+    return {"message": "Updated Trust Policy"}
 
 @app.get("/health")
 def health():
